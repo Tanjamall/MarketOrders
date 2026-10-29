@@ -6,6 +6,7 @@ import { subscribeToInventory, subscribeToOrders, subscribeToVendors, subscribeT
 import { DEMO_INVENTORY, DEMO_ORDERS, DEMO_VENDORS, DEMO_TEAM_MEMBERS, DEMO_TEAM_PAYOUTS } from './demoData';
 
 import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { InventoryManager } from './components/InventoryManager';
 import { OrdersManager } from './components/OrdersManager';
@@ -48,6 +49,24 @@ const MainApp: React.FC = () => {
   const { user, profile, activeRole, canEditInventory, loading: authLoading, login } = useAuth();
 
   const [activeTab, setActiveTab] = useState<string>('orders');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('marketpulse_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('marketpulse_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -341,11 +360,13 @@ const MainApp: React.FC = () => {
   const isBrandNewCloud = Boolean(user) && !loading && inventory.length === 0 && orders.length === 0;
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* Top Navbar */}
-      <Navbar
+    <div className="min-h-screen bg-slate-100/70 text-slate-900 flex font-sans selection:bg-blue-600 selection:text-white">
+      {/* Desktop Collapsible Side Panel */}
+      <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
         lowStockCount={lowStockCount}
         onOpenNewSale={() => handleOpenNewSale()}
         onOpenNewItem={() => handleOpenNewItem()}
@@ -353,29 +374,44 @@ const MainApp: React.FC = () => {
         onOpenSeedModal={() => setSeedModalOpen(true)}
       />
 
-      {/* Cloud vs Demo Notice Banner */}
-      {!user && (
-        <div className="bg-slate-900 text-white py-2 px-4 text-xs">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span className="text-slate-300">
-                You are currently exploring in <strong>Interactive Demo Mode</strong> with pre-populated marketplace inventory.
-              </span>
-            </div>
-            <button
-              onClick={login}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1 rounded-lg text-xs flex items-center gap-1.5 self-start sm:self-auto cursor-pointer shadow-sm"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span>Sign in with Google to Sync Cloud</span>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Main Content Column */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Streamlined Top Navbar */}
+        <Navbar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={handleToggleSidebar}
+          lowStockCount={lowStockCount}
+          onOpenNewSale={() => handleOpenNewSale()}
+          onOpenNewItem={() => handleOpenNewItem()}
+          onOpenCSVImport={() => setCsvModalOpen(true)}
+          onOpenSeedModal={() => setSeedModalOpen(true)}
+        />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Cloud vs Demo Notice Banner */}
+        {!user && (
+          <div className="bg-slate-900 text-white py-2 px-4 text-xs">
+            <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span className="text-slate-300">
+                  You are currently exploring in <strong>Interactive Demo Mode</strong> with pre-populated marketplace inventory.
+                </span>
+              </div>
+              <button
+                onClick={login}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1 rounded-lg text-xs flex items-center gap-1.5 self-start sm:self-auto cursor-pointer shadow-sm"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign in with Google to Sync Cloud</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-5">
         
         {/* First Time Cloud Onboarding Banner */}
         {isBrandNewCloud && (
@@ -752,6 +788,7 @@ const MainApp: React.FC = () => {
         }
         onSave={handleRecordPayout}
       />
+      </div>
     </div>
   );
 };

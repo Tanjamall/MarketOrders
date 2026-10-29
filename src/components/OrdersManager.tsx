@@ -164,14 +164,28 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
     });
   }, [periodFilteredOrders, searchQuery, statusFilter]);
 
-  // Financial summary (Realized profit and revenue in current period & filter)
+  // Realized delivered orders in the selected period (independent of statusFilter or search)
+  const realizedPeriodOrders = useMemo(() => {
+    return periodFilteredOrders.filter((o) => normalizeStatus(o.status) === 'delivered');
+  }, [periodFilteredOrders]);
+
+  // Financial summary: Shows the realized financial data of the selected time frame,
+  // completely unaffected by status tab selection or search query.
   const summary = useMemo(() => {
-    const totalRev = filteredOrders.reduce((sum, o) => sum + (o.totalRevenue || 0), 0);
-    const totalCost = filteredOrders.reduce((sum, o) => sum + (o.totalCost || 0), 0);
-    const totalProfit = filteredOrders.reduce((sum, o) => sum + (o.netProfit || 0), 0);
+    const totalRev = realizedPeriodOrders.reduce((sum, o) => sum + (o.totalRevenue || 0), 0);
+    const totalCost = realizedPeriodOrders.reduce((sum, o) => sum + (o.totalCost || 0), 0);
+    const totalProfit = realizedPeriodOrders.reduce((sum, o) => sum + (o.netProfit || 0), 0);
     const avgMargin = totalRev > 0 ? ((totalProfit / totalRev) * 100).toFixed(1) : '0';
-    return { totalRev, totalCost, totalProfit, avgMargin, count: filteredOrders.length };
-  }, [filteredOrders]);
+    return {
+      totalRev,
+      totalCost,
+      totalProfit,
+      avgMargin,
+      realizedCount: realizedPeriodOrders.length,
+      totalCount: periodFilteredOrders.length,
+      count: periodFilteredOrders.length,
+    };
+  }, [realizedPeriodOrders, periodFilteredOrders]);
 
   const handleQuickStatusChange = async (order: Order, newStatus: OrderStatus) => {
     if (!canEditInventory) return;
@@ -387,10 +401,10 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
                   Financial Summary
                 </h2>
                 <span className="text-[11px] text-slate-400 font-medium">
-                  {periodFilter === 'this_month' && 'This Month (Delivered & Current Orders)'}
-                  {periodFilter === 'today' && 'Today (Delivered Today & Current Orders)'}
-                  {periodFilter === 'last_month' && 'Last Month'}
-                  {periodFilter === 'all' && 'All-Time Historical'}
+                  {periodFilter === 'this_month' && 'This Month (Realized)'}
+                  {periodFilter === 'today' && 'Today (Realized)'}
+                  {periodFilter === 'last_month' && 'Last Month (Realized)'}
+                  {periodFilter === 'all' && 'All-Time (Realized)'}
                 </span>
               </div>
             </div>
@@ -421,23 +435,25 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
             </div>
           </div>
 
-          {/* Key Metric Tiles */}
+          {/* Key Metric Tiles: Constant across status tabs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-1">
             <div className="bg-slate-800/60 rounded-xl p-2.5 border border-slate-700/50">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Revenue</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Realized Revenue</span>
               <span className="text-base sm:text-lg font-black text-blue-300">${summary.totalRev.toFixed(2)}</span>
             </div>
             <div className="bg-slate-800/60 rounded-xl p-2.5 border border-slate-700/50">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Net Profit</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Realized Profit</span>
               <span className="text-base sm:text-lg font-black text-emerald-400">+${summary.totalProfit.toFixed(2)}</span>
             </div>
             <div className="bg-slate-800/60 rounded-xl p-2.5 border border-slate-700/50">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Profit Margin</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Realized Margin</span>
               <span className="text-base sm:text-lg font-black text-emerald-300">{summary.avgMargin}%</span>
             </div>
             <div className="bg-slate-800/60 rounded-xl p-2.5 border border-slate-700/50">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Orders In Period</span>
-              <span className="text-base sm:text-lg font-black text-slate-200">{summary.count}</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Delivered Orders</span>
+              <span className="text-base sm:text-lg font-black text-slate-200">
+                {summary.realizedCount} <span className="text-xs text-slate-400 font-normal">/ {summary.totalCount} total</span>
+              </span>
             </div>
           </div>
         </div>
@@ -507,17 +523,235 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {filteredOrders.map((ord) => {
-            const currentStatus = normalizeStatus(ord.status);
-            const cfg = statusConfig[currentStatus];
-            const mapsLink = ord.googleMapsUrl || (ord.customerAddress ? `https://maps.google.com/?q=${encodeURIComponent(ord.customerAddress)}` : null);
+        <>
+          {/* Desktop Table View (Optimized for Wide Aspect Ratio Displays) */}
+          <div className="hidden md:block bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/90 text-slate-500 font-semibold border-b border-slate-200/80">
+                  <tr>
+                    <th className="py-3 px-4 whitespace-nowrap">Status</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Date & Order</th>
+                    <th className="py-3 px-4">Customer & Delivery</th>
+                    <th className="py-3 px-4">Product Details</th>
+                    {canViewFinancials && (
+                      <>
+                        <th className="py-3 px-3 text-right whitespace-nowrap">Revenue</th>
+                        <th className="py-3 px-3 text-right whitespace-nowrap">Cost</th>
+                        <th className="py-3 px-3 text-right whitespace-nowrap">Net Profit</th>
+                        <th className="py-3 px-3 text-center whitespace-nowrap">Margin</th>
+                      </>
+                    )}
+                    <th className="py-3 px-4 whitespace-nowrap">Confirmation Agent</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredOrders.map((ord) => {
+                    const currentStatus = normalizeStatus(ord.status);
+                    const cfg = statusConfig[currentStatus];
+                    const mapsLink = ord.googleMapsUrl || (ord.customerAddress ? `https://maps.google.com/?q=${encodeURIComponent(ord.customerAddress)}` : null);
 
-            return (
-              <div
-                key={ord.id}
-                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between gap-3"
-              >
+                    return (
+                      <tr
+                        key={ord.id}
+                        className="hover:bg-slate-50/80 transition-colors group cursor-pointer"
+                        onClick={() => onOpenNewSale(ord)}
+                      >
+                        {/* Status Dropdown */}
+                        <td className="py-3 px-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative inline-flex items-center">
+                            <select
+                              value={currentStatus}
+                              onChange={(e) => handleQuickStatusChange(ord, e.target.value as OrderStatus)}
+                              disabled={!canEditInventory}
+                              aria-label="Order status"
+                              className={`text-xs font-bold py-1.5 pl-2.5 pr-6 rounded-lg border cursor-pointer appearance-none transition-colors ${cfg.bg} ${cfg.text} ${cfg.border} hover:opacity-95 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60 disabled:cursor-not-allowed`}
+                            >
+                              <option value="new" className="text-slate-900 bg-white font-medium">New</option>
+                              <option value="confirmed" className="text-slate-900 bg-white font-medium">Confirmed</option>
+                              <option value="delivered" className="text-slate-900 bg-white font-medium">Delivered</option>
+                              <option value="cancelled" className="text-slate-900 bg-white font-medium">Cancelled</option>
+                            </select>
+                            <ChevronDown className={`w-3.5 h-3.5 absolute right-1.5 pointer-events-none ${cfg.text}`} />
+                          </div>
+                        </td>
+
+                        {/* Date & Attribution */}
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {currentStatus === 'delivered' ? (
+                            <div>
+                              <div className="font-bold text-emerald-700 flex items-center gap-1">
+                                <span>{ord.deliveredDate || ord.date}</span>
+                                <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">Delivered</span>
+                              </div>
+                              {ord.deliveredDate && ord.deliveredDate !== ord.date && (
+                                <div className="text-[10px] text-slate-400 mt-0.5">Ordered: {ord.date}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="font-semibold text-slate-800">{ord.date}</div>
+                              {ord.paymentMethod && (
+                                <div className="text-[10px] text-slate-400 capitalize">{ord.paymentMethod}</div>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Customer & Address */}
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900">{ord.buyerName || 'Facebook Customer'}</div>
+                          {ord.customerPhone && (
+                            <div className="text-[11px] text-blue-600 flex items-center gap-1 mt-0.5" onClick={(e) => e.stopPropagation()}>
+                              <Phone className="w-3 h-3 text-blue-500 shrink-0" />
+                              <a href={`tel:${ord.customerPhone}`} className="hover:underline font-medium">
+                                {ord.customerPhone}
+                              </a>
+                            </div>
+                          )}
+                          {ord.customerAddress && (
+                            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1 max-w-sm truncate" onClick={(e) => e.stopPropagation()}>
+                              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate" title={ord.customerAddress}>{ord.customerAddress}</span>
+                              <button
+                                onClick={() => copyToClipboard(ord.customerAddress!, ord.id)}
+                                title="Copy address"
+                                className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer shrink-0"
+                              >
+                                {copiedId === ord.id ? (
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                              {mapsLink && (
+                                <a
+                                  href={mapsLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="Open on Google Maps"
+                                  className="text-blue-600 hover:text-blue-800 p-0.5 shrink-0"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Product & Qty */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-800 font-bold rounded text-[11px] shrink-0">
+                              {ord.quantity}x
+                            </span>
+                            <span className="font-semibold text-slate-800 truncate max-w-xs" title={ord.itemTitle}>
+                              {ord.itemTitle}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            ${ord.salePrice.toFixed(2)} each
+                          </div>
+                          {ord.notes && (
+                            <div className="text-[10px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1 flex items-center gap-1 max-w-xs truncate" title={ord.notes}>
+                              <MessageSquareText className="w-3 h-3 shrink-0 text-amber-600" />
+                              <span className="truncate">{ord.notes}</span>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Financials */}
+                        {canViewFinancials && (
+                          <>
+                            <td className="py-3 px-3 text-right font-bold text-slate-900 whitespace-nowrap">
+                              ${ord.totalRevenue.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 text-right text-slate-500 whitespace-nowrap">
+                              ${ord.totalCost.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 text-right whitespace-nowrap">
+                              <span className="font-black text-emerald-700">
+                                +${ord.netProfit.toFixed(2)}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-center whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {ord.profitMargin?.toFixed(1) || 0}%
+                              </span>
+                            </td>
+                          </>
+                        )}
+
+                        {/* Confirmation Agent */}
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {ord.confirmationMemberName ? (
+                            <div>
+                              <div className="font-semibold text-slate-800 flex items-center gap-1">
+                                <Award className="w-3.5 h-3.5 text-blue-600" />
+                                <span>{ord.confirmationMemberName}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                <span className="font-bold text-blue-700">+${(ord.memberReward || 0).toFixed(2)}</span>
+                                <span className={`px-1.5 py-0.2 rounded-full font-bold uppercase ${
+                                  ord.status === 'cancelled'
+                                    ? 'bg-slate-200 text-slate-600'
+                                    : ord.rewardStatus === 'granted'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {ord.status === 'cancelled' ? 'Void' : ord.rewardStatus === 'granted' ? 'Paid' : 'Pending'}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">&mdash;</span>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            {canEditInventory && (
+                              <button
+                                onClick={() => onOpenNewSale(ord)}
+                                title="Edit order"
+                                className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                            )}
+                            {canDeleteRecords && (
+                              <button
+                                onClick={() => handleDelete(ord)}
+                                title="Delete order"
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Mobile Cards View (Untouched for Mobile Devices) */}
+          <div className="md:hidden grid grid-cols-1 gap-3.5">
+            {filteredOrders.map((ord) => {
+              const currentStatus = normalizeStatus(ord.status);
+              const cfg = statusConfig[currentStatus];
+              const mapsLink = ord.googleMapsUrl || (ord.customerAddress ? `https://maps.google.com/?q=${encodeURIComponent(ord.customerAddress)}` : null);
+
+              return (
+                <div
+                  key={ord.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between gap-3"
+                >
                 {/* Upper Section */}
                 <div className="space-y-2.5">
                   {/* Line 1: Customer Name + Phone + Price */}
@@ -702,7 +936,8 @@ export const OrdersManager: React.FC<OrdersManagerProps> = ({
             );
           })}
         </div>
-      )}
+      </>
+    )}
 
       {/* Floating "New Order" Action Button: High contrast, thumb-reachable at bottom */}
       {canEditInventory && (
